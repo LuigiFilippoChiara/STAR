@@ -5,6 +5,7 @@ import time
 import numpy as np
 import torch
 
+
 DATASET_NAME_TO_NUM = {
     'eth': 0,
     'hotel': 1,
@@ -327,7 +328,6 @@ class Trajectory_Dataloader():
             batch_data_mass.append((batch_data, Batch_id,))
         self.args.batch_around_ped = temp
         return batch_data_mass
-
 
     def find_trajectory_fragment(self, trajectory, startframe, seq_length, skip):
         '''
