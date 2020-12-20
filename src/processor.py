@@ -13,22 +13,22 @@ class processor(object):
         self.args = args
 
         self.dataloader = Trajectory_Dataloader(args)
-        self.net = STAR(args)
-
-        self.set_optimizer()
-
-        if self.args.using_cuda:
-            self.net = self.net.cuda()
-        else:
-            self.net = self.net.cpu()
-
-        if not os.path.isdir(self.args.model_dir):
-            os.mkdir(self.args.model_dir)
-
-        self.net_file = open(os.path.join(self.args.model_dir, 'net.txt'), 'a+')
-        self.net_file.write(str(self.net))
-        self.net_file.close()
-        self.log_file_curve = open(os.path.join(self.args.model_dir, 'log_curve.txt'), 'a+')
+        # self.net = STAR(args)
+        #
+        # self.set_optimizer()
+        #
+        # if self.args.using_cuda:
+        #     self.net = self.net.cuda()
+        # else:
+        #     self.net = self.net.cpu()
+        #
+        # if not os.path.isdir(self.args.model_dir):
+        #     os.mkdir(self.args.model_dir)
+        #
+        # self.net_file = open(os.path.join(self.args.model_dir, 'net.txt'), 'a+')
+        # self.net_file.write(str(self.net))
+        # self.net_file.close()
+        # self.log_file_curve = open(os.path.join(self.args.model_dir, 'log_curve.txt'), 'a+')
 
         self.best_ade = 100
         self.best_fde = 100

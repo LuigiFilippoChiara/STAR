@@ -90,11 +90,11 @@ if __name__ == '__main__':
 
     args = load_arg(p)
 
-    torch.cuda.set_device(0)
+    # torch.cuda.set_device(0)
 
     trainer = processor(args)
 
-    if args.phase == 'test':
-        trainer.test()
-    else:
-        trainer.train()
+    # if args.phase == 'test':
+    #     trainer.test()
+    # else:
+    #     trainer.train()

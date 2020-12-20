@@ -208,10 +208,12 @@ class Trajectory_Dataloader():
             frameped_dict = self.test_frameped_dict
             pedtraject_dict = self.test_pedtraject_dict
             cachefile = self.test_batch_cache
+
         if setname != 'train':
             shuffle = False
         else:
             shuffle = True
+
         data_index = self.get_data_index(frameped_dict, setname, ifshuffle=shuffle)
         val_index = data_index[:, :int(data_index.shape[1] * val_fraction)]
         train_index = data_index[:, (int(data_index.shape[1] * val_fraction) + 1):]
@@ -219,7 +221,7 @@ class Trajectory_Dataloader():
         valbatch = self.get_seq_from_index_balance(frameped_dict, pedtraject_dict, val_index, setname)
         trainbatchnums = len(trainbatch)
         valbatchnums = len(valbatch)
-
+        
         f = open(cachefile, "wb")
         pickle.dump((trainbatch, trainbatchnums, valbatch, valbatchnums), f, protocol=2)
         f.close()
@@ -542,7 +544,7 @@ def L2forTestS(outputs, targets, obs_length, lossMask, num_samples=20):
     for index, value in enumerate(min_index):
         best_error.append(error_full[value, :, index])
     best_error = torch.stack(best_error)
-    best_error = best_error.permute(1, 0)
+    best_error = best_error.permute(1, 0)Å
 
     error = torch.sum(error_full_sum_min)
     error_cnt = error_full.numel() / num_samples
