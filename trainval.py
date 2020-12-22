@@ -53,7 +53,7 @@ def load_arg(p):
     # save arg
     if os.path.exists(p.config):
         with open(p.config, 'r') as f:
-            default_arg = yaml.load(f)
+            default_arg = yaml.full_load(f)
         key = vars(p).keys()
         for k in default_arg.keys():
             if k not in key:
@@ -71,6 +71,7 @@ def load_arg(p):
 def save_arg(args):
     # save arg
     arg_dict = vars(args)
+    arg_dict['using_cuda'] = arg_dict['using_cuda'] and torch.cuda.is_available()
     if not os.path.exists(args.model_dir):
         os.makedirs(args.model_dir)
     with open(args.config, 'w') as f:
@@ -87,14 +88,11 @@ if __name__ == '__main__':
 
     if not load_arg(p):
         save_arg(p)
-
     args = load_arg(p)
-
-    # torch.cuda.set_device(0)
 
     trainer = processor(args)
 
-    # if args.phase == 'test':
-    #     trainer.test()
-    # else:
-    #     trainer.train()
+    if args.phase == 'test':
+        trainer.test()
+    if args.phase == 'train':
+        trainer.train()

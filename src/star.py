@@ -8,11 +8,11 @@ import torch.nn.functional as F
 from .multi_attention_forward import multi_head_attention_forward
 
 
-def get_noise(shape, noise_type):
+def get_noise(shape, noise_type, device):
     if noise_type == "gaussian":
-        return torch.randn(shape).cuda()
+        return torch.randn(shape).to(device)
     elif noise_type == "uniform":
-        return torch.rand(*shape).sub_(0.5).mul_(2.0).cuda()
+        return torch.rand(*shape).sub_(0.5).mul_(2.0).to(device)
     raise ValueError('Unrecognized noise type "%s"' % noise_type)
 
 
@@ -267,16 +267,17 @@ class TransformerEncoder(nn.Module):
 
 class TransformerModel(nn.Module):
 
-    def __init__(self, ninp, nhead, nhid, nlayers, dropout=0.5):
+    def __init__(self, ninp, nhead, nhid, nlayers, device, dropout=0.5):
         super(TransformerModel, self).__init__()
         self.model_type = 'Transformer'
         self.src_mask = None
         encoder_layers = TransformerEncoderLayer(ninp, nhead, nhid, dropout)
         self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers)
         self.ninp = ninp
+        self.device = device
 
     def forward(self, src, mask):
-        n_mask = mask + torch.eye(mask.shape[0], mask.shape[0]).cuda()
+        n_mask = mask + torch.eye(mask.shape[0], mask.shape[0]).to(self.device)
         n_mask = n_mask.float().masked_fill(n_mask == 0., float(-1e20)).masked_fill(n_mask == 1., float(0.0))
         output = self.transformer_encoder(src, mask=n_mask)
 
@@ -285,7 +286,7 @@ class TransformerModel(nn.Module):
 
 class STAR(torch.nn.Module):
 
-    def __init__(self, args, dropout_prob=0):
+    def __init__(self, args, device, dropout_prob=0):
         super(STAR, self).__init__()
 
         # set parameters for network architecture
@@ -293,6 +294,7 @@ class STAR(torch.nn.Module):
         self.output_size = 2
         self.dropout_prob = dropout_prob
         self.args = args
+        self.device = device
 
         self.temporal_encoder_layer = TransformerEncoderLayer(d_model=32, nhead=8)
 
@@ -302,8 +304,10 @@ class STAR(torch.nn.Module):
         nhead = 8  # the number of heads in the multihead-attention models
         dropout = 0.1  # the dropout value
 
-        self.spatial_encoder_1 = TransformerModel(emsize, nhead, nhid, nlayers, dropout)
-        self.spatial_encoder_2 = TransformerModel(emsize, nhead, nhid, nlayers, dropout)
+        self.spatial_encoder_1 = TransformerModel(emsize, nhead, nhid,
+                                                  nlayers, self.device, dropout)
+        self.spatial_encoder_2 = TransformerModel(emsize, nhead, nhid,
+                                                  nlayers, self.device, dropout)
 
         self.temporal_encoder_1 = TransformerEncoder(self.temporal_encoder_layer, 1)
         self.temporal_encoder_2 = TransformerEncoder(self.temporal_encoder_layer, 1)
@@ -406,10 +410,10 @@ class STAR(torch.nn.Module):
         nodes_abs, nodes_norm, shift_value, seq_list, nei_lists, nei_num, batch_pednum = inputs
         num_Ped = nodes_norm.shape[1]
 
-        outputs = torch.zeros(nodes_norm.shape[0], num_Ped, 2).cuda()
-        GM = torch.zeros(nodes_norm.shape[0], num_Ped, 32).cuda()
+        outputs = torch.zeros(nodes_norm.shape[0], num_Ped, 2).to(self.device)
+        GM = torch.zeros(nodes_norm.shape[0], num_Ped, 32).to(self.device)
 
-        noise = get_noise((1, 16), 'gaussian')
+        noise = get_noise((1, 16), 'gaussian', self.device)
 
         for framenum in range(self.args.seq_length - 1):
 

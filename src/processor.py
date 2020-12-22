@@ -13,22 +13,20 @@ class processor(object):
         self.args = args
 
         self.dataloader = Trajectory_Dataloader(args)
-        # self.net = STAR(args)
-        #
-        # self.set_optimizer()
-        #
-        # if self.args.using_cuda:
-        #     self.net = self.net.cuda()
-        # else:
-        #     self.net = self.net.cpu()
-        #
-        # if not os.path.isdir(self.args.model_dir):
-        #     os.mkdir(self.args.model_dir)
-        #
-        # self.net_file = open(os.path.join(self.args.model_dir, 'net.txt'), 'a+')
-        # self.net_file.write(str(self.net))
-        # self.net_file.close()
-        # self.log_file_curve = open(os.path.join(self.args.model_dir, 'log_curve.txt'), 'a+')
+
+        self.device = self.set_device()
+
+        self.net = STAR(args, self.device)
+        self.set_optimizer()
+        self.net = self.net.to(self.device)
+
+        if not os.path.isdir(self.args.model_dir):
+            os.mkdir(self.args.model_dir)
+
+        self.net_file = open(os.path.join(self.args.model_dir, 'net.txt'), 'a+')
+        self.net_file.write(str(self.net))
+        self.net_file.close()
+        self.log_file_curve = open(os.path.join(self.args.model_dir, 'log_curve.txt'), 'a+')
 
         self.best_ade = 100
         self.best_fde = 100
@@ -115,9 +113,9 @@ class processor(object):
             start = time.time()
             inputs, batch_id = self.dataloader.get_train_batch(batch)
             inputs = tuple([torch.Tensor(i) for i in inputs])
-            inputs = tuple([i.cuda() for i in inputs])
+            inputs = tuple([i.to(self.device) for i in inputs])
 
-            loss = torch.zeros(1).cuda()
+            loss = torch.zeros(1).to(self.device)
             batch_abs, batch_norm, shift_value, seq_list, nei_list, nei_num, batch_pednum = inputs
             inputs_forward = batch_abs[:-1], batch_norm[:-1], shift_value[:-1], seq_list[:-1], nei_list[:-1], nei_num[
                                                                                                               :-1], batch_pednum
@@ -187,3 +185,22 @@ class processor(object):
             final_error_cnt_epoch += final_error_cnt
 
         return error_epoch / error_cnt_epoch, final_error_epoch / final_error_cnt_epoch
+
+    def set_device(self):
+        # setting device on GPU if available, else CPU
+        if torch.cuda.is_available() and self.args.using_cuda:
+            device = torch.device('cuda')
+        else:
+            device = torch.device('cpu')
+        print('Using device:', device)
+        print()
+
+        # Additional Info when using cuda
+        if device.type == 'cuda':
+            print(torch.cuda.get_device_name(0))
+            print('Memory Usage:')
+            print('Allocated:',
+                  round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1), 'GB')
+            print('Cached:   ',
+                  round(torch.cuda.memory_reserved(0) / 1024 ** 3, 1), 'GB')
+        return device
