@@ -544,7 +544,7 @@ def L2forTestS(outputs, targets, obs_length, lossMask, num_samples=20):
     for index, value in enumerate(min_index):
         best_error.append(error_full[value, :, index])
     best_error = torch.stack(best_error)
-    best_error = best_error.permute(1, 0)Å
+    best_error = best_error.permute(1, 0)
 
     error = torch.sum(error_full_sum_min)
     error_cnt = error_full.numel() / num_samples
