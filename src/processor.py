@@ -62,7 +62,7 @@ class processor(object):
 
     def test(self):
 
-        print('Testing begin')
+        print('Testing begun')
         self.load_model()
         self.net.eval()
         test_error, test_final_error = self.test_epoch()
@@ -71,7 +71,7 @@ class processor(object):
                                                                                        test_error, test_final_error))
     def train(self):
 
-        print('Training begin')
+        print('Training begun')
         test_error, test_final_error = 0, 0
         for epoch in range(self.args.num_epochs):
 
@@ -95,13 +95,11 @@ class processor(object):
                 self.log_file_curve = open(os.path.join(self.args.model_dir, 'log_curve.txt'), 'a+')
 
             if epoch >= self.args.start_test:
-                print(
-                    '----epoch {}, train_loss={:.5f}, ADE={:.3f}, FDE={:.3f}, Best_ADE={:.3f}, Best_FDE={:.3f} at Epoch {}'
+                print('----epoch {}, train_loss={:.5f}, ADE={:.3f}, FDE={:.3f}, Best_ADE={:.3f}, Best_FDE={:.3f} at Epoch {}'
                         .format(epoch, train_loss, test_error, test_final_error, self.best_ade, self.best_fde,
                                 self.best_epoch))
             else:
-                print('----epoch {}, train_loss={:.5f}'
-                      .format(epoch, train_loss))
+                print('----epoch {}, train_loss={:.5f}'.format(epoch, train_loss))
 
     def train_epoch(self, epoch):
 
@@ -117,8 +115,9 @@ class processor(object):
 
             loss = torch.zeros(1).to(self.device)
             batch_abs, batch_norm, shift_value, seq_list, nei_list, nei_num, batch_pednum = inputs
-            inputs_forward = batch_abs[:-1], batch_norm[:-1], shift_value[:-1], seq_list[:-1], nei_list[:-1], nei_num[
-                                                                                                              :-1], batch_pednum
+            inputs_forward = batch_abs[:-1], batch_norm[:-1],\
+                             shift_value[:-1], seq_list[:-1],\
+                             nei_list[:-1], nei_num[:-1], batch_pednum
 
             self.net.zero_grad()
 
@@ -139,11 +138,12 @@ class processor(object):
             end = time.time()
 
             if batch % self.args.show_step == 0 and self.args.ifshow_detail:
-                print(
-                    'train-{}/{} (epoch {}), train_loss = {:.5f}, time/batch = {:.5f} '.format(batch,
-                                                                                               self.dataloader.trainbatchnums,
-                                                                                               epoch, loss.item(),
-                                                                                               end - start))
+                print('train-{}/{} (epoch {}), train_loss = {:.5f}, '
+                      'time/batch = {:.5f} '.format(
+                    batch,
+                    self.dataloader.trainbatchnums,
+                    epoch, loss.item(),
+                    end - start))
 
         train_loss_epoch = loss_epoch / self.dataloader.trainbatchnums
         return train_loss_epoch
@@ -193,7 +193,6 @@ class processor(object):
         else:
             device = torch.device('cpu')
         print('Using device:', device)
-        print()
 
         # Additional Info when using cuda
         if device.type == 'cuda':
@@ -203,4 +202,5 @@ class processor(object):
                   round(torch.cuda.memory_allocated(0) / 1024 ** 3, 1), 'GB')
             print('Cached:   ',
                   round(torch.cuda.memory_reserved(0) / 1024 ** 3, 1), 'GB')
+        print()
         return device

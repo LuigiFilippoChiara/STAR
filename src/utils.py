@@ -28,6 +28,7 @@ class Trajectory_Dataloader():
 
             # Data directory where the pre-processed pickle file resides
             self.data_dir = './data'
+            # TODO Why do I have this to skip?
             skip = [6, 10, 10, 10, 10, 10, 10, 10]
 
             train_set = [i for i in range(len(self.data_dirs))]
@@ -56,26 +57,28 @@ class Trajectory_Dataloader():
         self.train_batch_cache = os.path.join(self.args.save_dir, "train_batch_cache.cpkl")
         self.test_batch_cache = os.path.join(self.args.save_dir, "test_batch_cache.cpkl")
 
-        print("Creating pre-processed data from raw data.")
+        print("Creating pre-processed data from raw data ...")
         self.traject_preprocess('train')
         self.traject_preprocess('test')
-        print("Done.")
+        print("Done.\n")
 
         # Load the processed data from the pickle file
-        print("Preparing data batches.")
+        print("Preparing data batches ...")
         if not (os.path.exists(self.train_batch_cache)):
             self.frameped_dict, self.pedtraject_dict = self.load_dict(self.train_data_file)
+            print("Train set:")
             self.dataPreprocess('train')
         if not (os.path.exists(self.test_batch_cache)):
             self.test_frameped_dict, self.test_pedtraject_dict = self.load_dict(self.test_data_file)
+            print("Test set:")
             self.dataPreprocess('test')
 
         self.trainbatch, self.trainbatchnums, _, _ = self.load_cache(self.train_batch_cache)
         self.testbatch, self.testbatchnums, _, _ = self.load_cache(self.test_batch_cache)
-        print("Done.")
 
         print('Total number of training batches:', self.trainbatchnums)
         print('Total number of test batches:', self.testbatchnums)
+        print("Done.\n")
 
         self.reset_batch_pointer(set='train', valid=False)
         self.reset_batch_pointer(set='train', valid=True)
@@ -121,11 +124,14 @@ class Trajectory_Dataloader():
 
             for ind, pedi in enumerate(Pedlist):
                 if ind % 100 == 0:
-                    print(ind, len(Pedlist))
+                    print("Scene {} of {}, preprocessed pedestrians: {}/{}".format(
+                        seti, setname, ind, len(Pedlist)))
                 # Extract trajectories of one person
                 FrameContainPed = data[:, data[1, :] == pedi]
                 # Extract peds list
                 FrameList = FrameContainPed[0, :].tolist()
+                # TODO WHat happens if I have trajectories with less than 20
+                #  frames?!
                 if len(FrameList) < 2:
                     continue
                 # Add number of frames of this trajectory
@@ -158,6 +164,9 @@ class Trajectory_Dataloader():
         total_frame = 0
         for seti, dict in enumerate(data_dict):
             frames = sorted(dict)
+            # TODO Why are we subtracting 20 frames and not 20 timesteps?!
+            #?! maxframe = max(frames) - self.args.seq_length*(frames[1] -
+            # frames[0])
             maxframe = max(frames) - self.args.seq_length
             frames = [x for x in frames if not x > maxframe]
             total_frame += len(frames)
@@ -230,7 +239,7 @@ class Trajectory_Dataloader():
         '''
         Query the trajectories fragments from data sampling index.
         Notes: Divide the scene if there are too many people; accumulate the scene if there are few people.
-               This function takes less gpu memory.
+        This function takes less gpu memory.
         '''
         batch_data_mass = []
         batch_data = []
@@ -244,9 +253,11 @@ class Trajectory_Dataloader():
 
         ped_cnt = 0
         last_frame = 0
+
+        # loop over frames
         for i in range(data_index.shape[1]):
             if i % 100 == 0:
-                print(i, '/', data_index.shape[1])
+                print("Processed frames:", i, '/', data_index.shape[1])
             cur_frame, cur_set, _ = data_index[:, i]
             framestart_pedi = set(frameped_dict[cur_set][cur_frame])
             try:
@@ -254,6 +265,7 @@ class Trajectory_Dataloader():
             except:
                 continue
             present_pedi = framestart_pedi | frameend_pedi
+            # if there are only new pedestrians in the end frame
             if (framestart_pedi & frameend_pedi).__len__() == 0:
                 continue
             traject = ()
@@ -333,7 +345,8 @@ class Trajectory_Dataloader():
 
     def find_trajectory_fragment(self, trajectory, startframe, seq_length, skip):
         '''
-        Query the trajectory fragment based on the index. Replace where data isn't exsist with 0.
+        Query the trajectory fragment based on the index. Replace with 0 if
+        data does not exist.
         '''
         return_trajec = np.zeros((seq_length, 3))
         endframe = startframe + (seq_length) * skip
@@ -377,7 +390,7 @@ class Trajectory_Dataloader():
 
     def massup_batch(self, batch_data):
         '''
-        Massed up data fragements in different time window together to a batch
+        Mass up data fragments in different time windows together to a batch
         '''
         num_Peds = 0
         for batch in batch_data:
@@ -402,7 +415,8 @@ class Trajectory_Dataloader():
 
     def get_social_inputs_numpy(self, inputnodes):
         '''
-        Get the sequence list (denoting where data exsist) and neighboring list (denoting where neighbors exsist).
+        Get the sequence list (denoting where data exists) and neighboring
+        list (denoting where neighbors exists).
         '''
         num_Peds = inputnodes.shape[1]
 
@@ -563,8 +577,8 @@ def timeit(method):
         print('Function', method.__name__, 'time:', round((te - ts) * 1000, 1), 'ms')
         print()
         return result
-
     return timed
+
 
 def import_class(name):
     components = name.split('.')
