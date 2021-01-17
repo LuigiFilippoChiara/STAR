@@ -35,6 +35,8 @@ class Trajectory_Dataloader():
             train_set = [i for i in range(len(self.data_dirs))]
 
             assert args.test_set in DATASET_NAME_TO_NUM.keys(), 'Unsupported dataset {}'.format(args.test_set)
+            print("Test set is: {} --> index = {}\n"
+                  .format(args.test_set, DATASET_NAME_TO_NUM[args.test_set]))
 
             args.test_set = DATASET_NAME_TO_NUM[args.test_set]
 
@@ -185,6 +187,9 @@ class Trajectory_Dataloader():
         data_index = data_index[:, all_frame_id_list]
 
         # to make full use of the data, add the beginning at the end
+        # TODO: Why do I need this?! self.args.batch_size is really
+        #  useful?! Shouldn't self.args.obs_length or self.args.batch_around_ped
+        #  be used instead?
         if setname == 'train':
             data_index = np.append(data_index, data_index[:, :self.args.batch_size], 1)
         return data_index
@@ -596,16 +601,14 @@ def getLossMask(outputs, node_first, seq_list, using_cuda=False):
 
     Returns
     -------
-    loss_mask
-        nbciir3bir
-        Shape: seq_len*
-    num
-
+    loss_mask : PyTorch tensor
+        Shape: seq_len*N_pedestrians
+        loss_mask[t,i] = 1 if pedestrian i if present at both t and t-1
     """
 
-    if outputs.dim() == 3:
+    if outputs.dim() == 3:  # train or deterministic test
         seq_length = outputs.shape[0]
-    elif outputs.dim() == 4:
+    elif outputs.dim() == 4:  # stochastic test
         seq_length = outputs.shape[1]
 
     node_pre = node_first
@@ -621,13 +624,12 @@ def getLossMask(outputs, node_first, seq_list, using_cuda=False):
         else:
             loss_mask[frame_num] = seq_list[frame_num] * loss_mask[frame_num - 1]
 
-    return loss_mask, sum(sum(loss_mask))
+    return loss_mask
 
 
 def L2forTest(outputs, targets, obs_length, lossMask):
     """
     Evaluation function for deterministic output.
-
     """
 
     # outputs = outputs[0, :, :, :]
@@ -642,12 +644,13 @@ def L2forTest(outputs, targets, obs_length, lossMask):
     pedi_full = torch.sum(lossMask, dim=0) == seq_length
     # TODO: here again we are considering one less temporal step. Why?!
     error_full = error[obs_length - 1:, pedi_full]
+
     error = torch.sum(error_full)  # ADE
     error_cnt = error_full.numel()  # Denominator ADE
     final_error = torch.sum(error_full[-1])  # FDE
     final_error_cnt = error_full[-1].numel()  # Denominator for FDE
 
-    return error.item(), error_cnt, final_error.item(), final_error_cnt, error_full
+    return error.item(), error_cnt, final_error.item(), final_error_cnt
 
 
 def L2forTestS(outputs, targets, obs_length, lossMask, num_samples=20):
@@ -655,12 +658,23 @@ def L2forTestS(outputs, targets, obs_length, lossMask, num_samples=20):
     Evaluation, stochastic version
     """
 
+    # TODO: check if it works also for num_samples = 1 (deterministic)
+
+
     assert outputs.dim() == 4, "sample_num * seq_len * N_pedestrians * (x,y)"
-    assert outputs.size()[0] == num_samples
-    assert outputs.size()[1] == 19  # TODO: Why not 20?!
-    assert outputs.size()[3] == 2
+    assert outputs.shape[0] == num_samples
+    assert outputs.shape[1] == 19  # TODO: Why not 20?!
+    assert outputs.shape[3] == 2
+
+    assert targets.dim() == 3, "seq_len * N_pedestrians * (x,y)"
+    assert outputs.shape[1:] == targets.shape
+
+    assert obs_length == 8, "Observation length"
+
+    assert lossMask.shape == outputs.shape[1:3]
 
     seq_length = outputs.shape[1]
+    # compute L2 error of (x, y) distances point-wise
     # error.size() : sample_num * seq_len * N_pedestrians
     error = torch.norm(outputs - targets, p=2, dim=3)
     # only calculate the pedestrian presents fully presented in the time window
@@ -678,13 +692,13 @@ def L2forTestS(outputs, targets, obs_length, lossMask, num_samples=20):
         best_error.append(error_full[value, :, index])
     best_error = torch.stack(best_error)
     best_error = best_error.permute(1, 0)
-    # best_error.size() : 12 * N_pedestrians_full
+    # best_error.size() : pred_length (12) * N_pedestrians_full
 
-    error = torch.sum(error_full_sum_min)
-    error_cnt = error_full.numel() / num_samples
+    error = torch.sum(best_error)  # ADE
+    error_cnt = best_error.numel()  # ADE denominator count
 
-    final_error = torch.sum(best_error[-1])
-    final_error_cnt = error_full.shape[-1]
+    final_error = torch.sum(best_error[-1])  # FDE
+    final_error_cnt = best_error.shape[-1]  # FDE denominator count
 
     return error.item(), error_cnt, final_error.item(), final_error_cnt
 
