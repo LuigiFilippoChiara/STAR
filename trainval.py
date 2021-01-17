@@ -24,26 +24,34 @@ def get_parser():
                         help='Set this value to [eth, hotel, zara1, zara2, univ] for ETH-univ, ETH-hotel, UCY-zara01, UCY-zara02, UCY-univ')
     parser.add_argument('--base_dir', default='.', help='Base directory including these scripts.')
     parser.add_argument('--save_base_dir', default='./output/', help='Directory for saving caches and models.')
-    parser.add_argument('--phase', default='train', help='Set this value to \'train\' or \'test\'')
+    # TODO: change! default='test'
+    parser.add_argument('--phase', default='train', help='Set this value to '
+                                                         '"train" or "test"')
     parser.add_argument('--train_model', default='star', help='Your model name')
     parser.add_argument('--load_model', default=None, type=str, help="load pretrained model for test or training")
     parser.add_argument('--model', default='star.STAR')
     parser.add_argument('--seq_length', default=20, type=int)
     parser.add_argument('--obs_length', default=8, type=int)
     parser.add_argument('--pred_length', default=12, type=int)
-    parser.add_argument('--batch_around_ped', default=256, type=int)
+    parser.add_argument('--batch_around_ped', default=256, type=int,
+                        help="=Desired number of pedestrians in a batch - at "
+                             "least")
     parser.add_argument('--batch_size', default=8, type=int)
     parser.add_argument('--test_batch_size', default=4, type=int)
     parser.add_argument('--show_step', default=100, type=int)
-    parser.add_argument('--start_test', default=10, type=int)
+    # TODO: change! default=10
+    parser.add_argument('--start_test', default=1, type=int)
     parser.add_argument('--sample_num', default=20, type=int)
-    parser.add_argument('--num_epochs', default=300, type=int)
+    # TODO: change! default=300
+    parser.add_argument('--num_epochs', default=3, type=int)
     parser.add_argument('--ifshow_detail', default=True, type=ast.literal_eval)
     parser.add_argument('--ifsave_results', default=False, type=ast.literal_eval)
     # TODO random rotation truly working?! Used in rotate_shift_batch
     parser.add_argument('--randomRotate', default=True, type=ast.literal_eval,
-                        help="=True:random rotation of each trajectory fragment")
-    parser.add_argument('--neighbor_thred', default=10, type=int)
+                        help="=True: random rotation of each trajectory "
+                             "fragment")
+    # TODO: threshold distance to be considered neighbors
+    parser.add_argument('--neighbor_thred', default=10, type=int, help="threshold distance to be considered neighbors")
     parser.add_argument('--learning_rate', default=0.0015, type=float)
     parser.add_argument('--clip', default=1, type=int)
 

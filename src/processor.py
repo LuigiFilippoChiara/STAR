@@ -115,6 +115,8 @@ class processor(object):
 
             loss = torch.zeros(1).to(self.device)
             batch_abs, batch_norm, shift_value, seq_list, nei_list, nei_num, batch_pednum = inputs
+            # TODO: Why would I take away the last temporal step?! len=19
+            # take away the last temporal step
             inputs_forward = batch_abs[:-1], batch_norm[:-1],\
                              shift_value[:-1], seq_list[:-1],\
                              nei_list[:-1], nei_num[:-1], batch_pednum
@@ -139,7 +141,7 @@ class processor(object):
 
             if batch % self.args.show_step == 0 and self.args.ifshow_detail:
                 print('train-{}/{} (epoch {}), train_loss = {:.5f}, '
-                      'time/batch = {:.5f} '.format(
+                      'time/batch = {:.5f}'.format(
                     batch,
                     self.dataloader.trainbatchnums,
                     epoch, loss.item(),
@@ -151,7 +153,7 @@ class processor(object):
     @torch.no_grad()
     def test_epoch(self):
         self.dataloader.reset_batch_pointer(set='test')
-        error_epoch, final_error_epoch = 0, 0,
+        error_epoch, final_error_epoch = 0, 0  # ADE, FDE
         error_cnt_epoch, final_error_cnt_epoch = 1e-5, 1e-5
 
         for batch in tqdm(range(self.dataloader.testbatchnums)):
@@ -164,6 +166,7 @@ class processor(object):
 
             batch_abs, batch_norm, shift_value, seq_list, nei_list, nei_num, batch_pednum = inputs
 
+            # TODO: Why do I exclude last temporal step?
             inputs_forward = batch_abs[:-1], batch_norm[:-1], shift_value[:-1], seq_list[:-1], nei_list[:-1], nei_num[
                                                                                                               :-1], batch_pednum
 
@@ -176,8 +179,9 @@ class processor(object):
             all_output = torch.stack(all_output)
 
             lossmask, num = getLossMask(all_output, seq_list[0], seq_list[1:], using_cuda=self.args.using_cuda)
-            error, error_cnt, final_error, final_error_cnt = L2forTestS(all_output, batch_norm[1:, :, :2],
-                                                                        self.args.obs_length, lossmask)
+            error, error_cnt, final_error, final_error_cnt = L2forTestS(
+                outputs=all_output, targets=batch_norm[1:, :, :2],
+                obs_length=self.args.obs_length, lossMask=lossmask)
 
             error_epoch += error
             error_cnt_epoch += error_cnt

@@ -28,7 +28,8 @@ class Trajectory_Dataloader():
 
             # Data directory where the pre-processed pickle file resides
             self.data_dir = './data'
-            # TODO Why do I have this to skip?
+
+            # frame deltas between frames_id, for each scene
             skip = [6, 10, 10, 10, 10, 10, 10, 10]
 
             train_set = [i for i in range(len(self.data_dirs))]
@@ -58,19 +59,19 @@ class Trajectory_Dataloader():
         self.test_batch_cache = os.path.join(self.args.save_dir, "test_batch_cache.cpkl")
 
         print("Creating pre-processed data from raw data ...")
-        self.traject_preprocess('train')
-        self.traject_preprocess('test')
+        if not os.path.exists(self.train_data_file):
+            self.traject_preprocess('train')
+        if not os.path.exists(self.test_data_file):
+            self.traject_preprocess('test')
         print("Done.\n")
 
         # Load the processed data from the pickle file
         print("Preparing data batches ...")
         if not (os.path.exists(self.train_batch_cache)):
             self.frameped_dict, self.pedtraject_dict = self.load_dict(self.train_data_file)
-            print("Train set:")
             self.dataPreprocess('train')
         if not (os.path.exists(self.test_batch_cache)):
             self.test_frameped_dict, self.test_pedtraject_dict = self.load_dict(self.test_data_file)
-            print("Test set:")
             self.dataPreprocess('test')
 
         self.trainbatch, self.trainbatchnums, _, _ = self.load_cache(self.train_batch_cache)
@@ -100,8 +101,8 @@ class Trajectory_Dataloader():
         numFrame_data = []
 
         Pedlist_data = []
-        frameped_dict = []  # peds id contained in a certain frame
-        pedtrajec_dict = []  # trajectories of a certain ped
+        frameped_dict = []  # frame_id: [pedestrains_ids]
+        pedtrajec_dict = []  # ped_id: trajectory
         # For each dataset
         for seti, directory in enumerate(data_dirs):
 
@@ -122,33 +123,35 @@ class Trajectory_Dataloader():
             frameped_dict.append({})
             pedtrajec_dict.append({})
 
+            # iterate over pedestrians of the current scene
             for ind, pedi in enumerate(Pedlist):
                 if ind % 100 == 0:
                     print("Scene {} of {}, preprocessed pedestrians: {}/{}".format(
                         seti, setname, ind, len(Pedlist)))
-                # Extract trajectories of one person
+                # Frame that contains that pedestrian
                 FrameContainPed = data[:, data[1, :] == pedi]
-                # Extract peds list
+                # To list
                 FrameList = FrameContainPed[0, :].tolist()
-                # TODO WHat happens if I have trajectories with less than 20
-                #  frames?!
                 if len(FrameList) < 2:
+                    # ignore the person if present in less than 2 frames
                     continue
-                # Add number of frames of this trajectory
+                # Add number of frames with data
                 numFrame_data[seti].append(len(FrameList))
-                # Initialize the row of the numpy array
+                # Initialize the numpy trajectory array
                 Trajectories = []
-                # For each ped in the current frame
 
+                # For each frame
                 for fi, frame in enumerate(FrameList):
                     # Extract their x and y positions
                     current_x = FrameContainPed[3, FrameContainPed[0, :] == frame][0]
                     current_y = FrameContainPed[2, FrameContainPed[0, :] == frame][0]
-                    # Add their pedID, x, y to the row of the numpy array
+                    # append pedID, x, y row to the end of the trajectory
                     Trajectories.append([int(frame), current_x, current_y])
                     if int(frame) not in frameped_dict[seti]:
                         frameped_dict[seti][int(frame)] = []
+                    # append frame: [peds] to dictiornary
                     frameped_dict[seti][int(frame)].append(pedi)
+                # append ped: Traj to dictorionary
                 pedtrajec_dict[seti][pedi] = np.array(Trajectories)
 
         f = open(data_file, "wb")
@@ -181,7 +184,7 @@ class Trajectory_Dataloader():
             random.Random().shuffle(all_frame_id_list)
         data_index = data_index[:, all_frame_id_list]
 
-        # to make full use of the data
+        # to make full use of the data, add the beginning at the end
         if setname == 'train':
             data_index = np.append(data_index, data_index[:, :self.args.batch_size], 1)
         return data_index
@@ -206,6 +209,8 @@ class Trajectory_Dataloader():
         '''
         Function to load the pre-processed data into the DataLoader object
         '''
+        print("{} set:".format(setname.capitalize()))
+
         if setname == 'train':
             val_fraction = 0
             frameped_dict = self.frameped_dict
@@ -236,22 +241,44 @@ class Trajectory_Dataloader():
         f.close()
 
     def get_seq_from_index_balance(self, frameped_dict, pedtraject_dict, data_index, setname):
-        '''
+        """
         Query the trajectories fragments from data sampling index.
-        Notes: Divide the scene if there are too many people; accumulate the scene if there are few people.
-        This function takes less gpu memory.
-        '''
-        batch_data_mass = []
-        batch_data = []
-        Batch_id = []
+        Notes: Divide the scene if there are too many people; accumulate the
+        scene if there are few people. This function takes less gpu memory.
 
-        temp = self.args.batch_around_ped
+        Parameters
+        ----------
+        frameped_dict : list
+            list of dictionaries (1 per scene), linking frame to present
+            pedestrians
+        pedtraject_dict : list
+            list of dictionaries (1 per scene), linking pedestrain to
+            trajectories
+        data_index : np.array
+            np.array containing frames_id and corresponding scenes
+        setname : str
+            "train" or "test"
+
+        Returns
+        -------
+        list
+            batch_data_mass: a list of batches of the form (batch_data,
+            Batch_id). Every batch is a tuple with data and indices.
+            batch_data = (nodes_batch_b, seq_list_b, nei_list_b, nei_num_b,
+            batch_pednum) is the results of massup_batch.
+            Batch_id is a list of batch_id = (cur_set, cur_frame)
+        """
+        batch_data_mass = []  # big container of all batches
+
+        batch_data = []  # container for a batch of data
+        Batch_id = []  # indices for the previous containers
+
         if setname == 'train':
             skip = self.trainskip
         else:
             skip = self.testskip
 
-        ped_cnt = 0
+        ped_cnt = 0  # accumulator of all analysed pedestrains
         last_frame = 0
 
         # loop over frames
@@ -259,27 +286,31 @@ class Trajectory_Dataloader():
             if i % 100 == 0:
                 print("Processed frames:", i, '/', data_index.shape[1])
             cur_frame, cur_set, _ = data_index[:, i]
+            # pedestrians in cur_frame
             framestart_pedi = set(frameped_dict[cur_set][cur_frame])
             try:
+                # pedestrians in the end frame (+20 frames)
                 frameend_pedi = set(frameped_dict[cur_set][cur_frame + self.args.seq_length * skip[cur_set]])
             except:
                 continue
+            # pedestrians present in the current 20 frames
             present_pedi = framestart_pedi | frameend_pedi
-            # if there are only new pedestrians in the end frame
             if (framestart_pedi & frameend_pedi).__len__() == 0:
+                # if the initial pedestrians all disappear after 20 frames
                 continue
-            traject = ()
-            IFfull = []
+            traject = ()  # tuple of trajectories for this frame, reshaped
+            IFfull = []  # corresponding booleans, if trajects are full
             for ped in present_pedi:
                 cur_trajec, iffull, ifexistobs = self.find_trajectory_fragment(pedtraject_dict[cur_set][ped], cur_frame,
                                                                                self.args.seq_length, skip[cur_set])
                 if len(cur_trajec) == 0:
                     continue
-                if ifexistobs == False:
+                if not ifexistobs:
                     # Just ignore trajectories if their data don't exsist at the last obversed time step (easy for data shift)
                     continue
                 if sum(cur_trajec[:, 0] > 0) < 5:
-                    # filter trajectories have too few frame data
+                    # TODO: why 5?
+                    # filter out trajectories that have less than 5 time-steps
                     continue
 
                 cur_trajec = (cur_trajec[:, 1:].reshape(-1, 1, 2),)
@@ -288,68 +319,80 @@ class Trajectory_Dataloader():
             if traject.__len__() < 1:
                 continue
             if sum(IFfull) < 1:
+                # I want at least one full traj per frame
                 continue
-            traject_batch = np.concatenate(traject, 1)
-            batch_pednum = sum([i.shape[1] for i in batch_data]) + traject_batch.shape[1]
-
+            # traject_batch.shape: seq_len*N_pedestrians*2
+            traject_batch = np.concatenate(traject, axis=1)
+            # number of ped in current fragmnet
             cur_pednum = traject_batch.shape[1]
+            # prosessive number of pedestrians in the batch
+            batch_pednum = sum([i.shape[1] for i in batch_data]) + cur_pednum
+
             ped_cnt += cur_pednum
-            batch_id = (cur_set, cur_frame,)
+            batch_id = (cur_set, cur_frame)
 
             if cur_pednum >= self.args.batch_around_ped * 2:
-                # too many people in current scene
-                # split the scene into two batches
-                ind = traject_batch[self.args.obs_length - 1].argsort(0)
-                cur_batch_data, cur_Batch_id = [], []
+                assert cur_pednum < self.args.batch_around_ped * 2, \
+                    "too many people ({}) in current fragment. Better to " \
+                    "increase batch_around_ped (current: {}) !" \
+                    "".format(cur_pednum, self.args.batch_around_ped)
+                # too many people in current fragment
+                # --> split the fragment into two batches
+                # indices to sort the pedestrians in the fragment
+                ind = traject_batch[self.args.obs_length - 1].argsort(axis=0)
+                # pedestrian are splitted in 2, based on the x position
                 Seq_batchs = [traject_batch[:, ind[:cur_pednum // 2, 0]], traject_batch[:, ind[cur_pednum // 2:, 0]]]
                 for sb in Seq_batchs:
+                    cur_batch_data, cur_Batch_id = [], []
                     cur_batch_data.append(sb)
                     cur_Batch_id.append(batch_id)
                     cur_batch_data = self.massup_batch(cur_batch_data)
-                    batch_data_mass.append((cur_batch_data, cur_Batch_id,))
-                    cur_batch_data = []
-                    cur_Batch_id = []
-
+                    batch_data_mass.append((cur_batch_data, cur_Batch_id))
                 last_frame = i
+
             elif cur_pednum >= self.args.batch_around_ped:
                 # good pedestrian numbers
+                # create one ad-hoc batch for this fragment only
                 cur_batch_data, cur_Batch_id = [], []
                 cur_batch_data.append(traject_batch)
                 cur_Batch_id.append(batch_id)
                 cur_batch_data = self.massup_batch(cur_batch_data)
-                batch_data_mass.append((cur_batch_data, cur_Batch_id,))
-
+                batch_data_mass.append((cur_batch_data, cur_Batch_id))
                 last_frame = i
-            else:  # less pedestrian numbers <64
-                # accumulate multiple framedata into a batch
+
+            else:  # cur_pednum < self.args.batch_around_ped (most common)
+                # --> accumulate multiple framedata into a batch
                 if batch_pednum > self.args.batch_around_ped:
-                    # enough people in the scene
+                    # enough people have been accumulated
                     batch_data.append(traject_batch)
                     Batch_id.append(batch_id)
 
                     batch_data = self.massup_batch(batch_data)
-                    batch_data_mass.append((batch_data, Batch_id,))
+                    batch_data_mass.append((batch_data, Batch_id))
 
                     last_frame = i
+                    # reinitialise batch data
                     batch_data = []
                     Batch_id = []
                 else:
+                    # continue to accumulate people (most common)
                     batch_data.append(traject_batch)
                     Batch_id.append(batch_id)
 
+        # if there are remaining pedestrians left outside
+        # TODO: Why only test?
         if last_frame < data_index.shape[1] - 1 and setname == 'test' and batch_pednum > 1:
             batch_data = self.massup_batch(batch_data)
-            batch_data_mass.append((batch_data, Batch_id,))
-        self.args.batch_around_ped = temp
+            batch_data_mass.append((batch_data, Batch_id))
         return batch_data_mass
 
     def find_trajectory_fragment(self, trajectory, startframe, seq_length, skip):
-        '''
-        Query the trajectory fragment based on the index. Replace with 0 if
-        data does not exist.
-        '''
+        """
+        Starting from a full trajectory, query the trajectory fragment
+        starting at startframe. Replace with 0 if data does not exist.
+        """
         return_trajec = np.zeros((seq_length, 3))
-        endframe = startframe + (seq_length) * skip
+        endframe = startframe + seq_length * skip
         start_n = np.where(trajectory[:, 0] == startframe)
         end_n = np.where(trajectory[:, 0] == endframe)
         iffull = False
@@ -389,10 +432,34 @@ class Trajectory_Dataloader():
         return return_trajec, iffull, ifexsitobs
 
     def massup_batch(self, batch_data):
-        '''
-        Mass up data fragments in different time windows together to a batch
-        '''
-        num_Peds = 0
+        """
+        Mass up data fragments in different time windows together to a batch.
+        Aggregate a list of arrays trajectory fragments into 4 big arrays.
+        nodes_batch_b contains the aggregated trajectory data,
+        while seq_list_b, nei_list_b, nei_num_b contains social information.
+
+        Parameters
+        ----------
+        batch_data : list
+            list of np.arrays of shape seq_length*N_pedestrians*(x,y)
+            Each array corresponds to a different time window/scene.
+            N_pedestrians may differ for each array of the list.
+
+        Returns
+        -------
+        tuple
+            (nodes_batch_b, seq_list_b, nei_list_b, nei_num_b, batch_pednum)
+            nodes_batch_b: trajectory data, aggregated over different time
+            fragments. Shape: seq_length*num_Peds*(x,y)
+            seq_list_b: boolean index, True when trajectory data exists. Shape:
+            seq_length*num_Peds
+            nei_list_b: boolean index, nei_list_b[f,i,j] is True when when i
+            is j's neighbor at time-step f. Shape: seq_length*num_Peds*num_Peds
+            nei_num_b: neighbors count for each pedestrian. Shape: seq_length*num_Peds
+            batch_pednum: list of pedestrian number in the same fragment,
+            as in the input batch_data.
+        """
+        num_Peds = 0 # number of pedestrians in batch_data
         for batch in batch_data:
             num_Peds += batch.shape[1]
 
@@ -400,19 +467,20 @@ class Trajectory_Dataloader():
         nodes_batch_b = np.zeros((self.args.seq_length, 0, 2))
         nei_list_b = np.zeros((self.args.seq_length, num_Peds, num_Peds))
         nei_num_b = np.zeros((self.args.seq_length, num_Peds))
-        num_Ped_h = 0
-        batch_pednum = []
+        num_Ped_h = 0  # pedestrian number accumulator inside for loop
+        batch_pednum = []  # pedestrian numbers per fragment in the batch
         for batch in batch_data:
             num_Ped = batch.shape[1]
             seq_list, nei_list, nei_num = self.get_social_inputs_numpy(batch)
-            nodes_batch_b = np.append(nodes_batch_b, batch, 1)
-            seq_list_b = np.append(seq_list_b, seq_list, 1)
+            nodes_batch_b = np.append(nodes_batch_b, batch, axis=1)
+            seq_list_b = np.append(seq_list_b, seq_list, axis=1)
             nei_list_b[:, num_Ped_h:num_Ped_h + num_Ped, num_Ped_h:num_Ped_h + num_Ped] = nei_list
             nei_num_b[:, num_Ped_h:num_Ped_h + num_Ped] = nei_num
             batch_pednum.append(num_Ped)
             num_Ped_h += num_Ped
-        return (nodes_batch_b, seq_list_b, nei_list_b, nei_num_b, batch_pednum)
+        return nodes_batch_b, seq_list_b, nei_list_b, nei_num_b, batch_pednum
 
+    # TODO: redo this function (have a loke at the notebook)
     def get_social_inputs_numpy(self, inputnodes):
         '''
         Get the sequence list (denoting where data exists) and neighboring
@@ -433,39 +501,49 @@ class Trajectory_Dataloader():
 
         # nei_list[f,i,j] denote if j is i's neighbors in frame f
         for pedi in range(num_Peds):
+            # the default is that everyone is neighbor (where data exists)
             nei_list[:, pedi, :] = seq_list
-            nei_list[:, pedi, pedi] = 0  # person i is not the neighbor of itself
-            nei_num[:, pedi] = np.sum(nei_list[:, pedi, :], 1)
+            nei_list[:, pedi, pedi] = 0  # person i is not neighbor of itself
+            nei_num[:, pedi] = np.sum(nei_list[:, pedi, :], axis=1)  # count
             seqi = inputnodes[:, pedi]
             for pedj in range(num_Peds):
                 seqj = inputnodes[:, pedj]
+                # where both sequences have data
                 select = (seq_list[:, pedi] > 0) & (seq_list[:, pedj] > 0)
 
                 relative_cord = seqi[select, :2] - seqj[select, :2]
 
-                # invalid data index
-                select_dist = (abs(relative_cord[:, 0]) > self.args.neighbor_thred) | (
-                        abs(relative_cord[:, 1]) > self.args.neighbor_thred)
+                # indices where pedi and pedj are not neighors
+                # select_dist = (abs(relative_cord[:, 0]) > self.args.neighbor_thred) | (
+                #         abs(relative_cord[:, 1]) > self.args.neighbor_thred)
+
+                # TODO: use l2_norm > L for distance instead of x>L or y>L
+                select_dist = np.linalg.norm(relative_cord,
+                                               axis=1) > self.args.neighbor_thred
 
                 nei_num[select, pedi] -= select_dist
 
                 select[select == True] = select_dist
                 nei_list[select, pedi, pedj] = 0
+
         return seq_list, nei_list, nei_num
 
     def rotate_shift_batch(self, batch_data, ifrotate=True):
-        '''
-        Random ration and zero shifting.
-        '''
+        """
+        Random ration and zero shifting of trajectories when batches are
+        loaded during training.
+        """
         batch, seq_list, nei_list, nei_num, batch_pednum = batch_data
 
         # rotate batch
         if ifrotate:
-            th = random.random() * np.pi
+            theta = random.random() * np.pi  # random angle between 0 and pi
             cur_ori = batch.copy()
-            batch[:, :, 0] = cur_ori[:, :, 0] * np.cos(th) - cur_ori[:, :, 1] * np.sin(th)
-            batch[:, :, 1] = cur_ori[:, :, 0] * np.sin(th) + cur_ori[:, :, 1] * np.cos(th)
-        # get shift value
+            # rotation around (0,0). Note that there are fragments of
+            # different scenes in a batch and they all rotate.
+            batch[:, :, 0] = cur_ori[:, :, 0] * np.cos(theta) - cur_ori[:, :, 1] * np.sin(theta)
+            batch[:, :, 1] = cur_ori[:, :, 0] * np.sin(theta) + cur_ori[:, :, 1] * np.cos(theta)
+        # get shift value (positions at the end of the observation time)
         s = batch[self.args.obs_length - 1]
 
         shift_value = np.repeat(s.reshape((1, -1, 2)), self.args.seq_length, 0)
@@ -498,60 +576,101 @@ class Trajectory_Dataloader():
 
 
 def getLossMask(outputs, node_first, seq_list, using_cuda=False):
-    '''
-    Get a mask to denote whether both of current and previous data exsist.
-    Note: It is not supposed to calculate loss for a person at time t if his data at t-1 does not exsist.
-    '''
+    """
+    Get a mask to denote whether both of current and previous data exist.
+    Note: It is not supposed to calculate loss for a person at time t if his
+    data at t-1 does not exist.
+
+    Parameters
+    ----------
+    outputs : PyTorch tensor
+        Output of the prediction model.
+        If stochastic size is: num_sample*seq_len*N_pedestrians*(x,y)
+        If deterministic size is: seq_len*N_pedestrians*(x,y)
+    node_first : PyTorch tensor
+        input is seq_list[0]. Size = N_pedestrians. Boolean mask that is =1
+        if pedestrian i is present at time-step 0.
+    seq_list : PyTorch tensor
+        input is seq_list[1:]. Size = (seq_len-1)*N_pedestrians. Boolean mask
+        that is =1 if pedestrian i is present at time-step t >= 1.
+
+    Returns
+    -------
+    loss_mask
+        nbciir3bir
+        Shape: seq_len*
+    num
+
+    """
 
     if outputs.dim() == 3:
         seq_length = outputs.shape[0]
-    else:
+    elif outputs.dim() == 4:
         seq_length = outputs.shape[1]
 
     node_pre = node_first
-    lossmask = torch.zeros(seq_length, seq_list.shape[1])
+    loss_mask = torch.zeros(seq_length, seq_list.shape[1])
 
     if using_cuda:
-        lossmask = lossmask.cuda()
+        loss_mask = loss_mask.cuda()
 
     # For loss mask, only generate for those exist through the whole window
-    for framenum in range(seq_length):
-        if framenum == 0:
-            lossmask[framenum] = seq_list[framenum] * node_pre
+    for frame_num in range(seq_length):
+        if frame_num == 0:
+            loss_mask[frame_num] = seq_list[frame_num] * node_pre
         else:
-            lossmask[framenum] = seq_list[framenum] * lossmask[framenum - 1]
+            loss_mask[frame_num] = seq_list[frame_num] * loss_mask[frame_num - 1]
 
-    return lossmask, sum(sum(lossmask))
+    return loss_mask, sum(sum(loss_mask))
 
 
 def L2forTest(outputs, targets, obs_length, lossMask):
-    '''
-    Evaluation.
-    '''
+    """
+    Evaluation function for deterministic output.
+
+    """
+
+    # outputs = outputs[0, :, :, :]
+
+    assert outputs.dim() == 3, "seq_len * N_pedestrians * (x,y)"
+    assert outputs.size()[0] == 19 # TODO: Why not 20?!
+    assert outputs.size()[3] == 2
+
     seq_length = outputs.shape[0]
     error = torch.norm(outputs - targets, p=2, dim=2)
     # only calculate the pedestrian presents fully presented in the time window
     pedi_full = torch.sum(lossMask, dim=0) == seq_length
+    # TODO: here again we are considering one less temporal step. Why?!
     error_full = error[obs_length - 1:, pedi_full]
-    error = torch.sum(error_full)
-    error_cnt = error_full.numel()
-    final_error = torch.sum(error_full[-1])
-    final_error_cnt = error_full[-1].numel()
+    error = torch.sum(error_full)  # ADE
+    error_cnt = error_full.numel()  # Denominator ADE
+    final_error = torch.sum(error_full[-1])  # FDE
+    final_error_cnt = error_full[-1].numel()  # Denominator for FDE
 
     return error.item(), error_cnt, final_error.item(), final_error_cnt, error_full
 
 
 def L2forTestS(outputs, targets, obs_length, lossMask, num_samples=20):
-    '''
+    """
     Evaluation, stochastic version
-    '''
+    """
+
+    assert outputs.dim() == 4, "sample_num * seq_len * N_pedestrians * (x,y)"
+    assert outputs.size()[0] == num_samples
+    assert outputs.size()[1] == 19  # TODO: Why not 20?!
+    assert outputs.size()[3] == 2
+
     seq_length = outputs.shape[1]
+    # error.size() : sample_num * seq_len * N_pedestrians
     error = torch.norm(outputs - targets, p=2, dim=3)
     # only calculate the pedestrian presents fully presented in the time window
     pedi_full = torch.sum(lossMask, dim=0) == seq_length
+    # TODO: here again one temporal step is forgotten..
     error_full = error[:, obs_length - 1:, pedi_full]
 
+    # sum over time-steps
     error_full_sum = torch.sum(error_full, dim=1)
+    # min over samples
     error_full_sum_min, min_index = torch.min(error_full_sum, dim=0)
 
     best_error = []
@@ -559,6 +678,7 @@ def L2forTestS(outputs, targets, obs_length, lossMask, num_samples=20):
         best_error.append(error_full[value, :, index])
     best_error = torch.stack(best_error)
     best_error = best_error.permute(1, 0)
+    # best_error.size() : 12 * N_pedestrians_full
 
     error = torch.sum(error_full_sum_min)
     error_cnt = error_full.numel() / num_samples
@@ -586,5 +706,3 @@ def import_class(name):
     for comp in components[1:]:
         mod = getattr(mod, comp)
     return mod
-
-
