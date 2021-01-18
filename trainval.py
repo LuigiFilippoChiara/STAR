@@ -31,7 +31,7 @@ def get_parser():
     # default='train'
     parser.add_argument('--phase', default='train',
                         help='Set this value to "train" or "test"')
-    parser.add_argument('--train_model', default='star', help='Your model name')
+    parser.add_argument('--train_model', default='star', help='Model name')
     # TODO: Check if I can load pre-trained model and continue learning
     parser.add_argument('--load_model', default=None, type=int,
                         help="Load pre-trained model for test or training. "
@@ -72,46 +72,60 @@ def get_parser():
     return parser
 
 
-def load_arg(p):
-    # save arg
-    if os.path.exists(p.config):
-        with open(p.config, 'r') as f:
-            default_arg = yaml.full_load(f)
-        key = vars(p).keys()
-        for k in default_arg.keys():
-            if k not in key:
-                print('WRONG ARG: {}'.format(k))
-                try:
-                    assert (k in key)
-                except:
-                    s = 1
-        parser.set_defaults(**default_arg)
-        return parser.parse_args()
-    else:
-        return False
+def load_arg(p_arg):
+    """
+    Load args from config file and confront them with parsed args.
+    p_arg are the entered parsed arguments for this run, while saved_args
+    are the previously saved config arguments.
+
+    The priority is:
+    command line > configuration files > default values in script.
+    """
+    with open(p_arg.config, 'r') as f:
+        saved_args = yaml.full_load(f)
+    for k in saved_args.keys():
+        if k not in vars(p_arg).keys():
+            raise KeyError('WRONG ARG: {}'.format(k))
+    assert set(saved_args) == set(vars(p_arg)), \
+        "Entered args and config saved args are different"
+    parser.set_defaults(**saved_args)
+    return parser.parse_args()
 
 
-def save_arg(args):
-    # save arg
-    arg_dict = vars(args)
-    arg_dict['using_cuda'] = arg_dict['using_cuda'] and torch.cuda.is_available()
-    if not os.path.exists(args.model_dir):
-        os.makedirs(args.model_dir)
-    with open(args.config, 'w') as f:
+def save_arg(arg):
+    """
+    Save args to config file
+    """
+    arg_dict = vars(arg)
+    if not os.path.exists(arg.model_dir):
+        os.makedirs(arg.model_dir)
+    with open(arg.config, 'w') as f:
         yaml.dump(arg_dict, f)
+
+
+def add_default_paths_and_device(arg):
+    """
+    Add default paths and device to parsed args
+    """
+    arg.save_dir = os.path.join(
+        arg.save_base_dir, str(arg.test_set))
+    arg.model_dir = os.path.join(
+        arg.save_dir, arg.train_model)
+    arg.config = os.path.join(
+        arg.model_dir, 'config_' + arg.phase + '.yaml')
+    arg.using_cuda = arg.using_cuda and torch.cuda.is_available()
+    return arg
 
 
 if __name__ == '__main__':
     parser = get_parser()
-    p = parser.parse_args()
+    pars_args = parser.parse_args()
+    pars_args = add_default_paths_and_device(pars_args)
 
-    p.save_dir = p.save_base_dir + str(p.test_set) + '/'
-    p.model_dir = p.save_base_dir + str(p.test_set) + '/' + p.train_model + '/'
-    p.config = p.model_dir + '/config_' + p.phase + '.yaml'
-
-    if not load_arg(p):
-        save_arg(p)
-    args = load_arg(p)
+    # configuration files are created at the first run
+    if not os.path.exists(pars_args.config):
+        save_arg(pars_args)
+    args = load_arg(pars_args)
 
     trainer = processor(args)
 
@@ -120,6 +134,6 @@ if __name__ == '__main__':
     elif args.phase == 'train':
         trainer.train()
     else:
-        raise ValueError("Unsupported phase! args.phase should be train or "
-                         "test")
+        raise ValueError(
+            "Unsupported phase! args.phase need to be train or test")
     print("Program finished.")
