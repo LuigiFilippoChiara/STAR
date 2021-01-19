@@ -16,14 +16,16 @@ torch.manual_seed(0)
 def get_parser():
     parser = argparse.ArgumentParser(description='STAR')
     parser.add_argument('--dataset', default='eth5')
-    parser.add_argument('--save_dir')
-    parser.add_argument('--model_dir')
-    parser.add_argument('--config')
-    parser.add_argument('--using_cuda', default=True, type=ast.literal_eval)
     parser.add_argument('--test_set', default='eth', type=str,
                         help='Set this value to [eth, hotel, zara1, zara2,'
                              ' univ] for ETH-univ, ETH-hotel, UCY-zara01, '
                              'UCY-zara02, UCY-univ')
+
+    parser.add_argument('--save_dir')
+    parser.add_argument('--model_dir')
+    parser.add_argument('--config')
+    parser.add_argument('--using_cuda', default=True, type=ast.literal_eval)
+
     parser.add_argument('--base_dir', default='.',
                         help='Base directory including these scripts.')
     parser.add_argument('--save_base_dir', default='./output/',
@@ -72,7 +74,7 @@ def get_parser():
     return parser
 
 
-def load_arg(p_arg):
+def load_arg(par, par_args):
     """
     Load args from config file and confront them with parsed args.
     p_arg are the entered parsed arguments for this run, while saved_args
@@ -81,15 +83,15 @@ def load_arg(p_arg):
     The priority is:
     command line > configuration files > default values in script.
     """
-    with open(p_arg.config, 'r') as f:
+    with open(par_args.config, 'r') as f:
         saved_args = yaml.full_load(f)
     for k in saved_args.keys():
-        if k not in vars(p_arg).keys():
+        if k not in vars(par_args).keys():
             raise KeyError('WRONG ARG: {}'.format(k))
-    assert set(saved_args) == set(vars(p_arg)), \
+    assert set(saved_args) == set(vars(par_args)), \
         "Entered args and config saved args are different"
-    parser.set_defaults(**saved_args)
-    return parser.parse_args()
+    par.set_defaults(**saved_args)
+    return par.parse_args()
 
 
 def save_arg(arg):
@@ -125,7 +127,7 @@ if __name__ == '__main__':
     # configuration files are created at the first run
     if not os.path.exists(pars_args.config):
         save_arg(pars_args)
-    args = load_arg(pars_args)
+    args = load_arg(parser, pars_args)
 
     trainer = processor(args)
 

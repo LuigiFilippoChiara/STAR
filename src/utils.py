@@ -605,7 +605,6 @@ def getLossMask(outputs, node_first, seq_list, using_cuda=False):
         Shape: seq_len*N_pedestrians
         loss_mask[t,i] = 1 if pedestrian i if present at both t and t-1
     """
-
     if outputs.dim() == 3:  # train or deterministic test
         seq_length = outputs.shape[0]
     elif outputs.dim() == 4:  # stochastic test
@@ -708,8 +707,8 @@ def timeit(method):
         ts = time.time()
         result = method(*args, **kw)
         te = time.time()
-        print('Function', method.__name__, 'time:', round((te - ts) * 1000, 1), 'ms')
-        print()
+        print('Function', method.__name__, 'time:',
+              round((te - ts) * 1000, 1), 'ms\n')
         return result
     return timed
 
