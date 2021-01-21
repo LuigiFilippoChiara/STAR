@@ -240,7 +240,7 @@ class Trajectory_Dataloader():
         valbatch = self.get_seq_from_index_balance(frameped_dict, pedtraject_dict, val_index, setname)
         trainbatchnums = len(trainbatch)
         valbatchnums = len(valbatch)
-        
+
         f = open(cachefile, "wb")
         pickle.dump((trainbatch, trainbatchnums, valbatch, valbatchnums), f, protocol=2)
         f.close()
