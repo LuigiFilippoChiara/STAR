@@ -21,8 +21,7 @@ class processor(object):
         if not os.path.isdir(self.args.model_dir):
             os.mkdir(self.args.model_dir)
         self.save_model_architecture()
-        self.log_file_curve = open(
-            os.path.join(self.args.model_dir, 'log_curve.txt'), 'a+')
+        self.log_file_curve = os.path.join(self.args.model_dir, 'log_curve.txt')
 
         self.best_ade = 100
         self.best_fde = 100
@@ -96,45 +95,51 @@ class processor(object):
         """
         # TODO: what if I want to load the model and continue training?
         print('Training begun')
-        test_error, test_final_error = 0, 0  # ADE, FDE
+        test_ade, test_fde = 0, 0  # ADE, FDE
 
         # TODO: write header only at the beginning (check load model)
-        self.log_file_curve.write(
-            "Epoch, Train_loss, Test_ADE, Test_FDE, Learning_rate\n")
+        with open(self.log_file_curve, 'w') as f:
+            f.write("Epoch,Learning_rate,"
+                    "Train_loss,"
+                    "Train_ADE,Test_FDE,"
+                    "Test_ADE,Test_FDE\n")
 
         for epoch in range(self.args.num_epochs):
 
             self.net.train()
-            train_loss = self.train_epoch(epoch)
+            train_loss, train_ade, train_fde = self.train_epoch(epoch)
 
             if epoch >= self.args.start_test:
                 self.net.eval()
-                test_error, test_final_error = self.test_epoch()  # ADE, FDE
+                test_ade, test_fde = self.test_epoch()  # ADE, FDE
 
-                if test_final_error < self.best_fde:  # update if better FDE
-                    self.best_ade = test_error
-                    self.best_fde = test_final_error
+                if test_fde < self.best_fde:  # update if better FDE
+                    self.best_ade = test_ade
+                    self.best_fde = test_fde
                     self.best_epoch = epoch
                 self.save_model(epoch)
 
-                print('----epoch {}, train_loss={:.5f}, test_ADE={:.3f}, '
-                      'test_FDE={:.3f}, Best_test_ADE={:.3f}, '
-                      'Best_test_FDE={:.3f} at Epoch {}'.format(
-                    epoch, train_loss, test_error, test_final_error,
-                    self.best_ade, self.best_fde, self.best_epoch))
+                print('----Epoch {}, train_loss={:.5f}, '
+                      'train_ADE={:.3f}, train_FDE={:.3f}, '
+                      'test_ADE={:.3f}, test_FDE={:.3f}, '
+                      'best_ADE={:.3f}, best_FDE={:.3f} '
+                      'at epoch {}'.format(
+                    epoch, train_loss,
+                    train_ade, train_fde,
+                    test_ade, test_fde,
+                    self.best_ade, self.best_fde,
+                    self.best_epoch))
             else:
                 print('----epoch {}, train_loss={:.5f}'.format(
                     epoch, train_loss))
 
-            self.log_file_curve.write(
-                str(epoch) + ',' + str(train_loss) + ',' + str(test_error) +
-                ',' + str(test_final_error) + ',' +
-                str(self.args.learning_rate) + '\n')
-
-            if epoch % 10 == 0:  # open and close stream just to be sure
-                self.log_file_curve.close()
-                self.log_file_curve = open(
-                    os.path.join(self.args.model_dir, 'log_curve.txt'), 'a+')
+            with open(self.log_file_curve, 'a') as f:
+                f.write(','.join(str(m) for m in [
+                    epoch, self.args.learning_rate,
+                    train_loss,
+                    train_ade, train_fde,
+                    test_ade, test_fde
+                ]) + '\n')
 
     def train_epoch(self, epoch):
         """
@@ -143,7 +148,9 @@ class processor(object):
         """
 
         self.dataloader.reset_batch_pointer(set='train', valid=False)
-        loss_epoch = 0
+        loss_epoch = 0  # Initialize epoch loss
+        ade_epoch, fde_epoch = 0, 0,  # ADE, FDE
+        ade_cnt, fde_cnt = 1e-5, 1e-5  # ADE, FDE denominators
 
         # loop over train batches
         for batch in range(self.dataloader.trainbatchnums):
@@ -171,7 +178,7 @@ class processor(object):
                                     using_cuda=self.args.using_cuda)
             # Compute an averaged Mean-Squared-Error, only on the positions
             # in which loss_mask is True
-            squared_error = self.criterion(outputs, batch_norm[1:, :, :2])
+            squared_error = self.criterion(outputs, batch_norm[1:])
             # sum Xs and Ys --> Shape becomes: seq_len*N_pedestrians
             loss_output = torch.sum(squared_error, dim=2)
             # TODO: it seems that the model is learning to compute the next
@@ -187,6 +194,18 @@ class processor(object):
             # Use computed grafient and update parameters with an optimizer
             self.optimizer.step()
 
+            with torch.no_grad():
+                error, error_cnt, final_error, final_error_cnt = L2forTestS(
+                    outputs=torch.stack([outputs]),
+                    targets=batch_norm[1:],
+                    loss_mask=loss_mask, obs_length=self.args.obs_length)
+
+            # used to print and log
+            ade_epoch += error
+            ade_cnt += error_cnt
+            fde_epoch += final_error
+            fde_cnt += final_error_cnt
+
             end = time.time()
 
             if batch % self.args.show_step == 0 and self.args.ifshow_detail:
@@ -196,7 +215,7 @@ class processor(object):
                     epoch, loss.item(), end - start))
 
         train_loss_epoch = loss_epoch / self.dataloader.trainbatchnums
-        return train_loss_epoch
+        return train_loss_epoch, ade_epoch/ade_cnt, fde_epoch/fde_cnt
 
     @torch.no_grad()
     def test_epoch(self):
@@ -238,7 +257,7 @@ class processor(object):
                                     using_cuda=self.args.using_cuda)
             error, error_cnt, final_error, final_error_cnt = L2forTestS(
                 outputs=all_output, targets=batch_norm[1:, :, :2],
-                obs_length=self.args.obs_length, lossMask=loss_mask)
+                obs_length=self.args.obs_length, loss_mask=loss_mask)
 
             error_epoch += error
             error_cnt_epoch += error_cnt

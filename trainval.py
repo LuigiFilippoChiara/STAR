@@ -30,7 +30,6 @@ def get_parser():
                         help='Base directory including these scripts.')
     parser.add_argument('--save_base_dir', default='./output/',
                         help='Directory for saving caches and models.')
-    # default='train'
     parser.add_argument('--phase', default='train',
                         help='Set this value to "train" or "test"')
     parser.add_argument('--train_model', default='star', help='Model name')
@@ -50,20 +49,18 @@ def get_parser():
     parser.add_argument('--batch_size', default=8, type=int, help="???")
     # TODO: This is not used at all.
     parser.add_argument('--test_batch_size', default=4, type=int)
-    # TODO: change! default=300
-    parser.add_argument('--num_epochs', default=3, type=int)
-    # TODO: change! default=10
-    parser.add_argument('--start_test', default=1, type=int)
+    parser.add_argument('--num_epochs', default=300, type=int)
+    parser.add_argument('--start_test', default=0, type=int)
     parser.add_argument('--show_step', default=100, type=int,
                         help="Intermediate results during training are shown "
                              "after show_step batches")
-    parser.add_argument('--ifshow_detail', default=True, type=ast.literal_eval,
+    parser.add_argument('--ifshow_detail', default=False, type=ast.literal_eval,
                         help="True: show intermediate epoch results during "
                              "training")
     parser.add_argument('--ifsave_results', default=False,
                         type=ast.literal_eval, help="True: save best model")
     # TODO: experiment with random rotation, True/False in Train/Test sets
-    parser.add_argument('--randomRotate', default=True, type=ast.literal_eval,
+    parser.add_argument('--randomRotate', default=False, type=ast.literal_eval,
                         help="True: random rotation of each trajectory fragment")
     # TODO: change and test threshold distance to be considered neighbors
     parser.add_argument('--neighbor_thred', default=10, type=int,

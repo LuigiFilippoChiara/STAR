@@ -631,8 +631,6 @@ def L2forTest(outputs, targets, obs_length, lossMask):
     Evaluation function for deterministic output.
     """
 
-    # outputs = outputs[0, :, :, :]
-
     assert outputs.dim() == 3, "seq_len * N_pedestrians * (x,y)"
     assert outputs.size()[0] == 19 # TODO: Why not 20?!
     assert outputs.size()[3] == 2
@@ -652,7 +650,7 @@ def L2forTest(outputs, targets, obs_length, lossMask):
     return error.item(), error_cnt, final_error.item(), final_error_cnt
 
 
-def L2forTestS(outputs, targets, obs_length, lossMask, num_samples=20):
+def L2forTestS(outputs, targets, obs_length, loss_mask, num_samples=20):
     """
     Evaluation, stochastic version
     """
@@ -661,7 +659,6 @@ def L2forTestS(outputs, targets, obs_length, lossMask, num_samples=20):
 
 
     assert outputs.dim() == 4, "sample_num * seq_len * N_pedestrians * (x,y)"
-    assert outputs.shape[0] == num_samples
     assert outputs.shape[1] == 19  # TODO: Why not 20?!
     assert outputs.shape[3] == 2
 
@@ -670,14 +667,14 @@ def L2forTestS(outputs, targets, obs_length, lossMask, num_samples=20):
 
     assert obs_length == 8, "Observation length"
 
-    assert lossMask.shape == outputs.shape[1:3]
+    assert loss_mask.shape == outputs.shape[1:3]
 
     seq_length = outputs.shape[1]
     # compute L2 error of (x, y) distances point-wise
     # error.size() : sample_num * seq_len * N_pedestrians
     error = torch.norm(outputs - targets, p=2, dim=3)
     # only calculate the pedestrian presents fully presented in the time window
-    pedi_full = torch.sum(lossMask, dim=0) == seq_length
+    pedi_full = torch.sum(loss_mask, dim=0) == seq_length
     # TODO: here again one temporal step is forgotten..
     error_full = error[:, obs_length - 1:, pedi_full]
 
