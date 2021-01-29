@@ -141,7 +141,7 @@ class processor(object):
         ade_epoch, fde_epoch = 0, 0,  # ADE, FDE
         ade_cnt, fde_cnt = 1e-5, 1e-5  # ADE, FDE denominators
 
-        for batch in range():  # self.dataloader.trainbatchnums
+        for batch in range(self.dataloader.trainbatchnums):
 
             start = time.time()
             inputs, batch_id = self.dataloader.get_train_batch(batch)
@@ -199,7 +199,7 @@ class processor(object):
         error_epoch, final_error_epoch = 0, 0,
         error_cnt_epoch, final_error_cnt_epoch = 1e-5, 1e-5
 
-        for batch in tqdm(range(3)):  # self.dataloader.testbatchnums
+        for batch in tqdm(range(self.dataloader.testbatchnums)):
 
             inputs, batch_id = self.dataloader.get_test_batch(batch)
             inputs = tuple([torch.Tensor(i) for i in inputs])
