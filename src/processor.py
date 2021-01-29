@@ -28,34 +28,45 @@ class processor(object):
         self.net_file = open(os.path.join(self.args.model_dir, 'net.txt'), 'a+')
         self.net_file.write(str(self.net))
         self.net_file.close()
-        self.log_file_curve = open(os.path.join(self.args.model_dir, 'log_curve.txt'), 'a+')
+
+        self.log_file_curve = os.path.join(self.args.model_dir, 'log_curve.txt')
 
         self.best_ade = 100
         self.best_fde = 100
         self.best_epoch = -1
 
     def save_model(self, epoch):
-
-        model_path = self.args.save_dir + '/' + self.args.train_model + '/' + self.args.train_model + '_' + \
-                     str(epoch) + '.tar'
-        torch.save({
-            'epoch': epoch,
-            'state_dict': self.net.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict()
-        }, model_path)
+        """
+        Save model and optimizer states at each epoch
+        """
+        model_path = os.path.join(
+                self.args.model_dir,
+                self.args.train_model + '_' + str(epoch) + '.tar')
+        torch.save({'epoch': epoch,
+                    'state_dict': self.net.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict()},
+                   model_path)
 
     def load_model(self):
-
+        """
+        Load a model. Can then be used to test
+        """
+        # TODO: what if I want to load the model and continue training?
         if self.args.load_model is not None:
-            self.args.model_save_path = self.args.save_dir + '/' + self.args.train_model + '/' + self.args.train_model + '_' + \
-                                        str(self.args.load_model) + '.tar'
-            print(self.args.model_save_path)
+            self.args.model_save_path = os.path.join(
+                self.args.model_dir,
+                self.args.train_model + '_' + str(self.args.load_model) +
+                '.tar')
+            print("Saved model path:", self.args.model_save_path)
             if os.path.isfile(self.args.model_save_path):
-                print('Loading checkpoint')
+                print('Loading checkpoint ...')
                 checkpoint = torch.load(self.args.model_save_path)
                 model_epoch = checkpoint['epoch']
                 self.net.load_state_dict(checkpoint['state_dict'])
-                print('Loaded checkpoint at epoch', model_epoch)
+                print('Loaded checkpoint at epoch', model_epoch, '\n')
+        else:
+            raise ValueError('You need to specify an epoch if you want to '
+                             'load a model! Change args.load_model')
 
     def set_optimizer(self):
 
@@ -63,54 +74,74 @@ class processor(object):
         self.criterion = nn.MSELoss(reduction='none')
 
     def test(self):
-
-        print('Testing begin')
+        """
+        Load a pre-trained model and test it on the test set (1 epoch)
+        """
         self.load_model()
+        print('Test begun')
         self.net.eval()
         test_error, test_final_error = self.test_epoch()
-        print('Set: {}, epoch: {},test_error: {} test_final_error: {}'.format(self.args.test_set,
-                                                                                          self.args.load_model,
-                                                                                       test_error, test_final_error))
+        print('Set: {}, epoch: {}, test_ADE: {}, test_FDE: {}'.format(
+            self.args.test_set, self.args.load_model, test_error,
+            test_final_error))
+
     def train(self):
 
         print('Training begin')
-        test_error, test_final_error = 0, 0
+        test_ade, test_fde = 0, 0  # ADE, FDE
+
+        # TODO: write header only at the beginning (check load model)
+        with open(self.log_file_curve, 'w') as f:
+            f.write("Epoch,Learning_rate,"
+                    "Train_loss,"
+                    "Train_ADE,Test_FDE,"
+                    "Test_ADE,Test_FDE\n")
+
         for epoch in range(self.args.num_epochs):
 
             self.net.train()
-            train_loss = self.train_epoch(epoch)
+            train_loss, train_ade, train_fde = self.train_epoch(epoch)
 
             if epoch >= self.args.start_test:
                 self.net.eval()
-                test_error, test_final_error = self.test_epoch()
-                self.best_ade = test_error if test_final_error < self.best_fde else self.best_ade
-                self.best_epoch = epoch if test_final_error < self.best_fde else self.best_epoch
-                self.best_fde = test_final_error if test_final_error < self.best_fde else self.best_fde
+                test_ade, test_fde = self.test_epoch()  # ADE, FDE
+
+                if test_fde < self.best_fde:  # update if better FDE
+                    self.best_ade = test_ade
+                    self.best_fde = test_fde
+                    self.best_epoch = epoch
                 self.save_model(epoch)
 
-            self.log_file_curve.write(
-                str(epoch) + ',' + str(train_loss) + ',' + str(test_error) + ',' + str(test_final_error) + ',' + str(
-                    self.args.learning_rate) + '\n')
-
-            if epoch % 10 == 0:
-                self.log_file_curve.close()
-                self.log_file_curve = open(os.path.join(self.args.model_dir, 'log_curve.txt'), 'a+')
-
-            if epoch >= self.args.start_test:
-                print(
-                    '----epoch {}, train_loss={:.5f}, ADE={:.3f}, FDE={:.3f}, Best_ADE={:.3f}, Best_FDE={:.3f} at Epoch {}'
-                        .format(epoch, train_loss, test_error, test_final_error, self.best_ade, self.best_fde,
-                                self.best_epoch))
+                print('----Epoch {}, train_loss={:.5f}, '
+                      'train_ADE={:.3f}, train_FDE={:.3f}, '
+                      'test_ADE={:.3f}, test_FDE={:.3f}, '
+                      'best_ADE={:.3f}, best_FDE={:.3f} '
+                      'at epoch {}'.format(
+                    epoch, train_loss,
+                    train_ade, train_fde,
+                    test_ade, test_fde,
+                    self.best_ade, self.best_fde,
+                    self.best_epoch))
             else:
-                print('----epoch {}, train_loss={:.5f}'
-                      .format(epoch, train_loss))
+                print('----epoch {}, train_loss={:.5f}'.format(
+                    epoch, train_loss))
+
+            with open(self.log_file_curve, 'a') as f:
+                f.write(','.join(str(m) for m in [
+                    epoch, self.args.learning_rate,
+                    train_loss,
+                    train_ade, train_fde,
+                    test_ade, test_fde
+                ]) + '\n')
 
     def train_epoch(self, epoch):
 
         self.dataloader.reset_batch_pointer(set='train', valid=False)
-        loss_epoch = 0
+        loss_epoch = 0  # Initialize epoch loss
+        ade_epoch, fde_epoch = 0, 0,  # ADE, FDE
+        ade_cnt, fde_cnt = 1e-5, 1e-5  # ADE, FDE denominators
 
-        for batch in range(self.dataloader.trainbatchnums):
+        for batch in range():  # self.dataloader.trainbatchnums
 
             start = time.time()
             inputs, batch_id = self.dataloader.get_train_batch(batch)
@@ -126,10 +157,10 @@ class processor(object):
 
             outputs = self.net.forward(inputs_forward, iftest=False)
 
-            lossmask, num = getLossMask(outputs, seq_list[0], seq_list[1:], using_cuda=self.args.using_cuda)
+            loss_mask, num = getLossMask(outputs, seq_list[0], seq_list[1:], using_cuda=self.args.using_cuda)
             loss_o = torch.sum(self.criterion(outputs, batch_norm[1:, :, :2]), dim=2)
 
-            loss += (torch.sum(loss_o * lossmask / num))
+            loss += (torch.sum(loss_o * loss_mask / num))
             loss_epoch += loss.item()
 
             loss.backward()
@@ -137,6 +168,18 @@ class processor(object):
             torch.nn.utils.clip_grad_norm_(self.net.parameters(), self.args.clip)
 
             self.optimizer.step()
+
+            with torch.no_grad():
+                error, error_cnt, final_error, final_error_cnt = L2forTestS(
+                    outputs=torch.stack([outputs]),
+                    targets=batch_norm[1:],
+                    loss_mask=loss_mask, obs_length=self.args.obs_length)
+
+            # used to print and log
+            ade_epoch += error
+            ade_cnt += error_cnt
+            fde_epoch += final_error
+            fde_cnt += final_error_cnt
 
             end = time.time()
 
@@ -148,7 +191,7 @@ class processor(object):
                                                                                                end - start))
 
         train_loss_epoch = loss_epoch / self.dataloader.trainbatchnums
-        return train_loss_epoch
+        return train_loss_epoch, ade_epoch/ade_cnt, fde_epoch/fde_cnt
 
     @torch.no_grad()
     def test_epoch(self):
@@ -156,7 +199,7 @@ class processor(object):
         error_epoch, final_error_epoch = 0, 0,
         error_cnt_epoch, final_error_cnt_epoch = 1e-5, 1e-5
 
-        for batch in tqdm(range(self.dataloader.testbatchnums)):
+        for batch in tqdm(range(3)):  # self.dataloader.testbatchnums
 
             inputs, batch_id = self.dataloader.get_test_batch(batch)
             inputs = tuple([torch.Tensor(i) for i in inputs])

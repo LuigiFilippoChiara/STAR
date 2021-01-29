@@ -36,12 +36,12 @@ def get_parser():
     parser.add_argument('--batch_size', default=8, type=int)
     parser.add_argument('--test_batch_size', default=4, type=int)
     parser.add_argument('--show_step', default=100, type=int)
-    parser.add_argument('--start_test', default=10, type=int)
+    parser.add_argument('--start_test', default=0, type=int)
     parser.add_argument('--sample_num', default=20, type=int)
     parser.add_argument('--num_epochs', default=300, type=int)
-    parser.add_argument('--ifshow_detail', default=True, type=ast.literal_eval)
+    parser.add_argument('--ifshow_detail', default=False, type=ast.literal_eval)
     parser.add_argument('--ifsave_results', default=False, type=ast.literal_eval)
-    parser.add_argument('--randomRotate', default=True, type=ast.literal_eval,
+    parser.add_argument('--randomRotate', default=False, type=ast.literal_eval,
                         help="=True:random rotation of each trajectory fragment")
     parser.add_argument('--neighbor_thred', default=10, type=int)
     parser.add_argument('--learning_rate', default=0.0015, type=float)

@@ -525,14 +525,14 @@ def L2forTest(outputs, targets, obs_length, lossMask):
     return error.item(), error_cnt, final_error.item(), final_error_cnt, error_full
 
 
-def L2forTestS(outputs, targets, obs_length, lossMask, num_samples=20):
+def L2forTestS(outputs, targets, obs_length, loss_mask, num_samples=20):
     '''
     Evaluation, stochastic version
     '''
     seq_length = outputs.shape[1]
     error = torch.norm(outputs - targets, p=2, dim=3)
     # only calculate the pedestrian presents fully presented in the time window
-    pedi_full = torch.sum(lossMask, dim=0) == seq_length
+    pedi_full = torch.sum(loss_mask, dim=0) == seq_length
     error_full = error[:, obs_length - 1:, pedi_full]
 
     error_full_sum = torch.sum(error_full, dim=1)
