@@ -94,7 +94,7 @@ class processor(object):
         with open(self.log_file_curve, 'w') as f:
             f.write("Epoch,Learning_rate,"
                     "Train_loss,"
-                    "Train_ADE,Test_FDE,"
+                    "Train_ADE,Train_FDE,"
                     "Test_ADE,Test_FDE\n")
 
         for epoch in range(self.args.num_epochs):
