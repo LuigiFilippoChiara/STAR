@@ -201,7 +201,6 @@ class Trajectory_Dataloader():
             frameped_dict = self.frameped_dict
             pedtraject_dict = self.pedtraject_dict
             cachefile = self.train_batch_cache
-
         else:
             val_fraction = 0
             frameped_dict = self.test_frameped_dict
@@ -210,7 +209,7 @@ class Trajectory_Dataloader():
         if setname != 'train':
             shuffle = False
         else:
-            shuffle = True
+            shuffle = False
         data_index = self.get_data_index(frameped_dict, setname, ifshuffle=shuffle)
         val_index = data_index[:, :int(data_index.shape[1] * val_fraction)]
         train_index = data_index[:, (int(data_index.shape[1] * val_fraction) + 1):]
@@ -263,7 +262,7 @@ class Trajectory_Dataloader():
                 if ifexistobs == False:
                     # Just ignore trajectories if their data don't exsist at the last obversed time step (easy for data shift)
                     continue
-                if sum(cur_trajec[:, 0] > 0) < 5:
+                if sum(cur_trajec[:, 0] > 0) < 8:
                     # filter trajectories have too few frame data
                     continue
 
@@ -389,7 +388,7 @@ class Trajectory_Dataloader():
         batch_pednum = []
         for batch in batch_data:
             num_Ped = batch.shape[1]
-            seq_list, nei_list, nei_num = self.get_social_inputs_numpy(batch)
+            seq_list, nei_list, nei_num = self.get_neighbourhood(batch)
             nodes_batch_b = np.append(nodes_batch_b, batch, 1)
             seq_list_b = np.append(seq_list_b, seq_list, 1)
             nei_list_b[:, num_Ped_h:num_Ped_h + num_Ped, num_Ped_h:num_Ped_h + num_Ped] = nei_list
@@ -398,43 +397,76 @@ class Trajectory_Dataloader():
             num_Ped_h += num_Ped
         return (nodes_batch_b, seq_list_b, nei_list_b, nei_num_b, batch_pednum)
 
-    def get_social_inputs_numpy(self, inputnodes):
-        '''
-        Get the sequence list (denoting where data exsist) and neighboring list (denoting where neighbors exsist).
-        '''
-        num_Peds = inputnodes.shape[1]
+    def get_neighbourhood(self, batch, neighbor_shape='circle'):
+        """
+        Define the social neighbourhood structure for a trajectory fragment.
+        Get the sequence list (denoting where data exists), neighbourhoods
+        list (denoting where neighbors exists) and neighbors counts.
 
-        seq_list = np.zeros((inputnodes.shape[0], num_Peds))
+        Parameters
+        ----------
+        batch : np.array
+            trajectory fragment. Shape: seq_len(20) * N_agents * (x,y)
+        neighbor_shape : str
+            Shape of the neighbourhood. Can be circle (2 norm) or square
+
+        Returns
+        -------
+        seq_list : np.array
+            Boolean mask of shape seq_len(20) * N_agents.
+            seq_list[f,i]=1 if batch[f,i] data exists
+        nei_list : np.array
+            Boolean mask of shape seq_len(20) * N_agents * N_agents.
+            nei_list[f,i,j] denote if j is i's neighbor in frame f
+        nei_num : np.array
+            Integer count of shape seq_len(20) * N_agents.
+            nei_list[f,i] denotes the number of neighbors of agent i in frame f
+        """
+        num_Agents = batch.shape[1]
+
+        assert neighbor_shape in ['circle', 'square']
+
         # denote where data not missing
-
-        for pedi in range(num_Peds):
-            seq = inputnodes[:, pedi]
+        seq_list = np.zeros((batch.shape[0], num_Agents))
+        for pedi in range(num_Agents):
+            seq = batch[:, pedi]
             seq_list[seq[:, 0] != 0, pedi] = 1
 
-        # get relative cords, neighbor id list
-        nei_list = np.zeros((inputnodes.shape[0], num_Peds, num_Peds))
-        nei_num = np.zeros((inputnodes.shape[0], num_Peds))
+        # neighbourhood id list. Default is no neighbors
+        # nei_list[f,i,j] denote if j is i's neighbor in frame f
+        nei_list = np.zeros((batch.shape[0], num_Agents, num_Agents))
 
-        # nei_list[f,i,j] denote if j is i's neighbors in frame f
-        for pedi in range(num_Peds):
-            nei_list[:, pedi, :] = seq_list
-            nei_list[:, pedi, pedi] = 0  # person i is not the neighbor of itself
-            nei_num[:, pedi] = np.sum(nei_list[:, pedi, :], 1)
-            seqi = inputnodes[:, pedi]
-            for pedj in range(num_Peds):
-                seqj = inputnodes[:, pedj]
-                select = (seq_list[:, pedi] > 0) & (seq_list[:, pedj] > 0)
+        for pedi in range(num_Agents):
+            seqi = batch[:, pedi]
+            for pedj in range(num_Agents):
+                # person i is not neighbor of itself
+                if pedi == pedj:
+                    continue
+                both_present = seq_list[:, [pedi, pedj]].all(axis=1)
+                seqj = batch[:, pedj]
+                relative_cord = seqi[:, :2] - seqj[:, :2]
+                # select_dist: indices where pedi and pedj are neighbors
+                if neighbor_shape == 'circle':
+                    # inside a circle of radius self.args.neighbor_thred
+                    select_dist = np.linalg.norm(relative_cord, ord=2, axis=1) < self.args.neighbor_thred
+                else:  # square
+                    # inside a square of side self.args.neighbor_thred
+                    select_dist = np.all(np.abs(relative_cord) < self.args.neighbor_thred, axis=1)
+                neighbors_bool = np.logical_and(both_present, select_dist)
+                nei_list[:, pedi, pedj] = neighbors_bool
 
-                relative_cord = seqi[select, :2] - seqj[select, :2]
+        # number of neighbors
+        nei_num = nei_list.sum(axis=1)
 
-                # invalid data index
-                select_dist = (abs(relative_cord[:, 0]) > self.args.neighbor_thred) | (
-                        abs(relative_cord[:, 1]) > self.args.neighbor_thred)
+        # TODO: get rid of these tests once merged
+        # TESTS
+        def check_symmetric(a, rtol=1e-05, atol=1e-08):
+            return np.allclose(a, a.T, rtol=rtol, atol=atol)
+        def check_all_symmetric(arr):
+            return all(check_symmetric(a) for a in arr)
+        assert nei_num.shape == (batch.shape[0], num_Agents)
+        assert check_all_symmetric(nei_list)
 
-                nei_num[select, pedi] -= select_dist
-
-                select[select == True] = select_dist
-                nei_list[select, pedi, pedj] = 0
         return seq_list, nei_list, nei_num
 
     def rotate_shift_batch(self, batch_data, ifrotate=True):

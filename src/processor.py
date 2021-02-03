@@ -79,7 +79,6 @@ class processor(object):
         """
         self.load_model()
         print('Test begun')
-        self.net.eval()
         test_error, test_final_error = self.test_epoch()
         print('Set: {}, epoch: {}, test_ADE: {}, test_FDE: {}'.format(
             self.args.test_set, self.args.load_model, test_error,
@@ -98,12 +97,9 @@ class processor(object):
                     "Test_ADE,Test_FDE\n")
 
         for epoch in range(self.args.num_epochs):
-
-            self.net.train()
             train_loss, train_ade, train_fde = self.train_epoch(epoch)
 
             if epoch >= self.args.start_test:
-                self.net.eval()
                 test_ade, test_fde = self.test_epoch()  # ADE, FDE
 
                 if test_fde < self.best_fde:  # update if better FDE
@@ -135,7 +131,7 @@ class processor(object):
                 ]) + '\n')
 
     def train_epoch(self, epoch):
-
+        self.net.train()
         self.dataloader.reset_batch_pointer(set='train', valid=False)
         loss_epoch = 0  # Initialize epoch loss
         ade_epoch, fde_epoch = 0, 0,  # ADE, FDE
@@ -195,6 +191,7 @@ class processor(object):
 
     @torch.no_grad()
     def test_epoch(self):
+        self.net.eval()
         self.dataloader.reset_batch_pointer(set='test')
         error_epoch, final_error_epoch = 0, 0,
         error_cnt_epoch, final_error_cnt_epoch = 1e-5, 1e-5
