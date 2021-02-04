@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from .star import STAR
-from .utils import *
+from .data_loader import *
 
 from tqdm import tqdm
 
