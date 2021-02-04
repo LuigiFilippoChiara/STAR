@@ -525,7 +525,7 @@ def L2forTest(outputs, targets, obs_length, lossMask):
     return error.item(), error_cnt, final_error.item(), final_error_cnt, error_full
 
 
-def L2forTestS(outputs, targets, obs_length, loss_mask, num_samples=20):
+def L2forTestS(outputs, targets, loss_mask, obs_length):
     '''
     Evaluation, stochastic version
     '''
@@ -544,11 +544,11 @@ def L2forTestS(outputs, targets, obs_length, loss_mask, num_samples=20):
     best_error = torch.stack(best_error)
     best_error = best_error.permute(1, 0)
 
-    error = torch.sum(error_full_sum_min)
-    error_cnt = error_full.numel() / num_samples
+    error = torch.sum(best_error)  # ADE
+    error_cnt = best_error.numel()  # ADE denominator count
 
-    final_error = torch.sum(best_error[-1])
-    final_error_cnt = error_full.shape[-1]
+    final_error = torch.sum(best_error[-1])  # FDE
+    final_error_cnt = best_error.shape[-1]  # FDE denominator count
 
     return error.item(), error_cnt, final_error.item(), final_error_cnt
 
