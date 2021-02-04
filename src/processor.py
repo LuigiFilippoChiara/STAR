@@ -217,9 +217,12 @@ class processor(object):
 
             all_output = torch.stack(all_output)
 
-            lossmask, num = getLossMask(all_output, seq_list[0], seq_list[1:], using_cuda=self.args.using_cuda)
-            error, error_cnt, final_error, final_error_cnt = L2forTestS(all_output, batch_norm[1:, :, :2],
-                                                                        self.args.obs_length, lossmask)
+            loss_mask, _ = getLossMask(all_output, seq_list[0], seq_list[1:],
+                                       using_cuda=self.args.using_cuda)
+            error, error_cnt, final_error, final_error_cnt = L2forTestS(
+                outputs=all_output,
+                targets=batch_norm[1:],
+                loss_mask=loss_mask, obs_length=self.args.obs_length)
 
             error_epoch += error
             error_cnt_epoch += error_cnt
