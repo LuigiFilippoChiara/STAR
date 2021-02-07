@@ -135,7 +135,6 @@ class processor(object):
 
     def train_epoch(self, epoch):
         self.net.train()
-        self.dataloader.reset_batch_pointer(set='train', valid=False)
         loss_epoch = 0  # Initialize epoch loss
         ade_epoch, fde_epoch = 0, 0,  # ADE, FDE
         ade_cnt, fde_cnt = 1e-5, 1e-5  # ADE, FDE denominators
@@ -195,7 +194,6 @@ class processor(object):
     @torch.no_grad()
     def test_epoch(self):
         self.net.eval()
-        self.dataloader.reset_batch_pointer(set='test')
         error_epoch, final_error_epoch = 0, 0,
         error_cnt_epoch, final_error_cnt_epoch = 1e-5, 1e-5
 
