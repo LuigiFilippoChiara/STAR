@@ -142,7 +142,7 @@ class processor(object):
         for batch in range(self.dataloader.train_batches_num):
 
             start = time.time()
-            inputs, batch_id = self.dataloader.get_train_batch(batch)
+            inputs, batch_id, _ = self.dataloader.get_train_batch(batch)
             inputs = tuple([torch.Tensor(i) for i in inputs])
             inputs = tuple([i.cuda() for i in inputs])
 
@@ -188,7 +188,7 @@ class processor(object):
                                                                                                epoch, loss.item(),
                                                                                                end - start))
 
-        train_loss_epoch = loss_epoch / self.dataloader.trainbatchnums
+        train_loss_epoch = loss_epoch / self.dataloader.train_batches_num
         return train_loss_epoch, ade_epoch/ade_cnt, fde_epoch/fde_cnt
 
     @torch.no_grad()
@@ -199,7 +199,7 @@ class processor(object):
 
         for batch in tqdm(range(self.dataloader.test_batches_num)):
 
-            inputs, batch_id = self.dataloader.get_test_batch(batch)
+            inputs, batch_id, _ = self.dataloader.get_test_batch(batch)
             inputs = tuple([torch.Tensor(i) for i in inputs])
 
             if self.args.using_cuda:
