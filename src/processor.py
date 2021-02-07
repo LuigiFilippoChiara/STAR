@@ -5,7 +5,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 from src.star import STAR
-from src.data_loader import *
+from src.data_loader import Trajectory_Data_Loader
 from src.utils import getLossMask, L2forTestS
 
 
@@ -14,7 +14,7 @@ class processor(object):
 
         self.args = args
 
-        self.dataloader = Trajectory_Dataloader(args)
+        self.dataloader = Trajectory_Data_Loader(args)
         self.net = STAR(args)
 
         self.set_optimizer()
