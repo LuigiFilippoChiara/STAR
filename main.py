@@ -32,7 +32,7 @@ def get_parser():
     parser.add_argument('--seq_length', default=20, type=int)
     parser.add_argument('--obs_length', default=8, type=int)
     parser.add_argument('--pred_length', default=12, type=int)
-    parser.add_argument('--batch_around_ped', default=128, type=int)
+    parser.add_argument('--batch_around_agent', default=128, type=int, help="=Desired number of pedestrians in a batch - at least")
     parser.add_argument('--batch_size', default=0, type=int)
     parser.add_argument('--test_batch_size', default=0, type=int)
     parser.add_argument('--show_step', default=100, type=int)
