@@ -41,11 +41,23 @@ def get_parser():
     parser.add_argument('--num_epochs', default=300, type=int)
     parser.add_argument('--ifshow_detail', default=False, type=ast.literal_eval)
     parser.add_argument('--ifsave_results', default=False, type=ast.literal_eval)
-    parser.add_argument('--randomRotate', default=False, type=ast.literal_eval,
-                        help="=True:random rotation of each trajectory fragment")
     parser.add_argument('--neighbor_thred', default=10, type=int)
     parser.add_argument('--learning_rate', default=0.0015, type=float)
     parser.add_argument('--clip', default=1, type=int)
+
+    parser.add_argument('--validation_set', default='test', type=str,
+                        help='Set used to validate. Can be "test" or "validation"')
+    parser.add_argument('--validation_fraction', default=0.1, type=float,
+                        help='Percentage of validation set in training set. Only used if validation_set is set to validation.')
+    parser.add_argument('--random_rotate', default=False, type=bool,
+                        help="Apply trajectory random rotation at each batch. Used for data augmentation")
+    parser.add_argument('--shift_last_obs', default=True, type=bool,
+                        help="Shift batch trajectories based on last observation coordinates. Used for data normalization.")
+    parser.add_argument('--shuffle_frames_train', default=False, type=bool, help="Set to True if you want to shuffle training frames. Set to False for deterministic behavior.")
+    parser.add_argument('--shuffle_frames_test', default=False, type=bool, help="Set to True if you want to shuffle test frames. Set to False for deterministic behavior.")
+    parser.add_argument('--neighbor_shape', default='circle', type=str, help="Neighborhood shape. Set to 'circle' (2-norm) or 'square'")
+    parser.add_argument('--min_traj_length', default=8, type=int,
+                        help="Within a batch, filter out trajectory fragments that have less than min_traj_length time-steps")
 
     return parser
 
